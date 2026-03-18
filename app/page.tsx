@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { RippleButton } from "@/components/ui/ripple-button"
+import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler"
 import { LayoutDashboard, ArrowRight } from "lucide-react"
 
 export default function Page() {
@@ -16,6 +17,7 @@ export default function Page() {
           <span>Joor</span>
         </div>
         <div className="flex items-center gap-4">
+          <AnimatedThemeToggler className="hidden sm:flex size-10 items-center justify-center rounded-full bg-background border border-border hover:bg-accent hover:text-accent-foreground transition-colors" />
           <Link href="/login">
             <RippleButton
               className="hidden sm:inline-flex rounded-full px-6 border-input bg-transparent text-foreground hover:bg-accent"

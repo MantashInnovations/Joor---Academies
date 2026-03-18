@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
+import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler"
 
 export function TopHeader({ 
   academyName, 
@@ -57,7 +58,8 @@ export function TopHeader({
           {academyName || "Joor Academy"}
         </Badge>
         
-        <div className="relative">
+        <div className="flex relative items-center gap-2">
+          <AnimatedThemeToggler className="h-9 w-9 flex items-center justify-center rounded-full hover:bg-accent hover:text-accent-foreground transition-colors" />
           <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full">
             <Bell className="h-5 w-5" />
             <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-destructive border-2 border-background" />

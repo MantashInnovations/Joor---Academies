@@ -3,6 +3,7 @@ import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { SmoothCursor } from "@/components/ui/smooth-cursor"
 
 const nunitoSans = Nunito_Sans({variable:'--font-sans'})
 
@@ -24,9 +25,11 @@ export default function RootLayout({
     >
       <body>
         <ThemeProvider>
+          <SmoothCursor />
           <TooltipProvider>{children}</TooltipProvider>
         </ThemeProvider>
       </body>
     </html>
+
   )
 }
