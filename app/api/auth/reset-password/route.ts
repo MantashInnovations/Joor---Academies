@@ -25,7 +25,8 @@ export async function POST(request: Request) {
     // Initialize admin client inside the handler to prevent module-level crashes
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      serviceRoleKey
+      serviceRoleKey,
+      { auth: { persistSession: false } }
     )
 
     // 1. Verify OTP from otp_verifications table
@@ -65,8 +66,14 @@ export async function POST(request: Request) {
     }
 
     // 3. Security Check: Ensure new password is different from current one
-    // We attempt to sign in with the new password; if it works, it's not a new password.
-    const { data: signInData, error: signInError } = await publicClient.auth.signInWithPassword({
+    // CRITICAL: We create a FRESH, NON-PERSISTING client for this check to avoid session pollution.
+    const checkClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { auth: { persistSession: false } }
+    )
+
+    const { data: signInData, error: signInError } = await checkClient.auth.signInWithPassword({
       email,
       password: newPassword,
     })
