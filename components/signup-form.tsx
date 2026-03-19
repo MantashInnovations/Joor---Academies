@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { PasswordInput } from "@/components/ui/password-input"
+import { validateEmailSource } from "@/lib/email-validation"
 
 export function SignupForm({
   className,
@@ -38,6 +39,14 @@ export function SignupForm({
     const password = formData.get("password") as string
     const fullName = formData.get("name") as string
     const confirmPassword = formData.get("confirm-password") as string
+
+    // Pre-check email source (block disposable domains)
+    const validation = validateEmailSource(email);
+    if (!validation.isValid) {
+      setError(validation.error || 'Please use a valid personal or business email');
+      setLoading(false)
+      return
+    }
 
     if (password !== confirmPassword) {
       setError("Passwords do not match")

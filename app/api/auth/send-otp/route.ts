@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { resend } from '@/lib/resend';
 import { createClient } from '@supabase/supabase-js';
+import { validateEmailSource } from '@/lib/email-validation';
 
 export async function POST(request: Request) {
   try {
@@ -9,6 +10,12 @@ export async function POST(request: Request) {
 
     if (!email) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+    }
+
+    // Validate email source (block disposable domains)
+    const validation = validateEmailSource(email);
+    if (!validation.isValid) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
     if (type === 'forgot') {
