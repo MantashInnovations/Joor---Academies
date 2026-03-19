@@ -74,9 +74,31 @@ export function ForgotPasswordForm({
       setError("Please enter a 6-digit code")
       return
     }
-    setStep("reset")
+    
+    setLoading(true)
     setError(null)
     setMessage(null)
+
+    try {
+      const response = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        body: JSON.stringify({ email, code: otp, shouldDelete: false }),
+        headers: { "Content-Type": "application/json" },
+      })
+
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || "Invalid or expired verification code")
+      }
+
+      setStep("reset")
+      setError(null)
+      setMessage(null)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleResetPassword = async (e: React.FormEvent) => {

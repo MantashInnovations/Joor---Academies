@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 
 export async function POST(request: Request) {
   try {
-    const { email, code } = await request.json();
+    const { email, code, shouldDelete = true } = await request.json();
 
     if (!email || !code) {
       return NextResponse.json({ error: 'Email and code are required' }, { status: 400 });
@@ -22,11 +22,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid or expired code' }, { status: 400 });
     }
 
-    // OTP is valid, clean up
-    await supabase
-      .from('otp_verifications')
-      .delete()
-      .eq('email', email);
+    // OTP is valid, clean up only if requested
+    if (shouldDelete) {
+      await supabase
+        .from('otp_verifications')
+        .delete()
+        .eq('email', email);
+    }
 
     // Note: In a real app, you would now mark the user as verified in the profiles table.
     // For now, we return success so the frontend can proceed.

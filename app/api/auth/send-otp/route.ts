@@ -55,6 +55,24 @@ export async function POST(request: Request) {
           error: 'This email is not recognized. Please check your spelling or sign up.' 
         }, { status: 404 });
       }
+
+      // 3. Server-side Rate Limiting (3 attempts per 15 minutes)
+      const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+      const { count, error: countError } = await supabase
+        .from('otp_verifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('email', email)
+        .gte('created_at', fifteenMinutesAgo);
+
+      if (countError) {
+        console.error('Rate limit check error:', countError);
+        // We continue if it's just a count error to avoid blocking users, 
+        // but log it for investigation.
+      } else if (count !== null && count >= 3) {
+        return NextResponse.json({ 
+          error: 'Too many attempts. Please try again after 15 minutes.' 
+        }, { status: 429 });
+      }
     }
 
     // Generate 6-digit OTP
