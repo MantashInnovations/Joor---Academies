@@ -64,6 +64,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
+    // 3. Security Check: Ensure new password is different from current one
+    // We attempt to sign in with the new password; if it works, it's not a new password.
+    const { data: signInData, error: signInError } = await publicClient.auth.signInWithPassword({
+      email,
+      password: newPassword,
+    })
+
+    if (signInData?.user || (signInError && signInError.message.includes("MFA"))) {
+      return NextResponse.json(
+        { error: "New password must be different from your current password." },
+        { status: 400 }
+      )
+    }
+
     // 3. Update password
     console.log("Updating password for user:", targetUser.id)
     const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(

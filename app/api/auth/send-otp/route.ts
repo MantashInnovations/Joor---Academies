@@ -58,19 +58,28 @@ export async function POST(request: Request) {
 
       // 3. Server-side Rate Limiting (3 attempts per 15 minutes)
       const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-      const { count, error: countError } = await supabase
+      const { data: attempts, error: countError } = await supabase
         .from('otp_verifications')
-        .select('*', { count: 'exact', head: true })
+        .select('created_at')
         .eq('email', email)
-        .gte('created_at', fifteenMinutesAgo);
+        .gte('created_at', fifteenMinutesAgo)
+        .order('created_at', { ascending: true });
 
       if (countError) {
         console.error('Rate limit check error:', countError);
-        // We continue if it's just a count error to avoid blocking users, 
-        // but log it for investigation.
-      } else if (count !== null && count >= 3) {
+      } else if (attempts && attempts.length >= 3) {
+        // The user can try again when the oldest attempt is older than 15 minutes
+        const oldestAttempt = new Date(attempts[0].created_at);
+        const nextAllowedAttempt = new Date(oldestAttempt.getTime() + 15 * 60 * 1000);
+        const remainingMs = nextAllowedAttempt.getTime() - Date.now();
+        
+        const remainingSecs = Math.ceil(remainingMs / 1000);
+        const mins = Math.floor(remainingSecs / 60);
+        const secs = remainingSecs % 60;
+        const timeStr = mins > 0 ? `${mins} minute${mins !== 1 ? 's' : ''} and ${secs} second${secs !== 1 ? 's' : ''}` : `${secs} second${secs !== 1 ? 's' : ''}`;
+
         return NextResponse.json({ 
-          error: 'Too many attempts. Please try again after 15 minutes.' 
+          error: `Too many attempts. Please try again after ${timeStr}.` 
         }, { status: 429 });
       }
     }
