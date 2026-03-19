@@ -87,6 +87,14 @@ export async function POST(request: Request) {
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
+    // Invalidate all previous OTPs for this email to ensure only the latest is valid
+    // We update them to be expired rather than deleting them to preserve rate-limit history.
+    await supabase
+      .from('otp_verifications')
+      .update({ expires_at: new Date().toISOString() })
+      .eq('email', email)
+      .gt('expires_at', new Date().toISOString());
+
     // Store OTP in Supabase (otp_verifications table)
     // Note: We use the public supabase client here. 
     // If RLS is strictly "false" for public, this might fail unless service role is used.
