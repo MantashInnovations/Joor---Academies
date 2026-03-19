@@ -155,17 +155,20 @@ export function AdminSidebar({
   const displayUser = propUser || data.user
   const displayAcademy = propAcademy || data.academy
 
-  React.useEffect(() => {
-    if (displayAcademy.logo && typeof displayAcademy.logo === 'string') {
-      console.log(`[AdminSidebar] Academy logo URL: ${displayAcademy.logo}`)
-    }
-  }, [displayAcademy.logo])
-
-  const AcademyLogo = (displayAcademy.logo && typeof displayAcademy.logo !== 'string') 
-    ? displayAcademy.logo 
-    : data.academy.logo
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .substring(0, 2)
+      .toUpperCase()
+  }
 
   const isStringLogo = typeof displayAcademy.logo === 'string' && displayAcademy.logo !== ''
+
+  const AcademyLogo = (displayAcademy.logo && typeof displayAcademy.logo !== 'string') 
+    ? displayAcademy.logo as React.ElementType
+    : data.academy.logo
 
   return (
     <Sidebar variant="inset" {...props}>
@@ -180,7 +183,11 @@ export function AdminSidebar({
                       src={displayAcademy.logo as string} 
                       alt={displayAcademy.name} 
                       className="size-full object-cover" 
-                      onError={(e) => console.error("[AdminSidebar] Logo failed to load:", displayAcademy.logo)}
+                      onError={(e) => {
+                        console.error("[AdminSidebar] Logo failed to load:", displayAcademy.logo)
+                        // If logo fails to load, fallback to default icon
+                        e.currentTarget.style.display = 'none'
+                      }}
                     />
                   ) : AcademyLogo ? (
                     <AcademyLogo className="size-4" />
@@ -189,10 +196,10 @@ export function AdminSidebar({
                   )}
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">
+                  <span className="truncate font-semibold text-sidebar-foreground">
                     {displayAcademy.name}
                   </span>
-                  <span className="truncate text-xs">Academy Admin</span>
+                  <span className="truncate text-xs text-muted-foreground/70">Academy Admin</span>
                 </div>
               </a>
             </SidebarMenuButton>
@@ -235,8 +242,8 @@ export function AdminSidebar({
                 >
                   <Avatar className="h-8 w-8 rounded-lg">
                     <AvatarImage src={displayUser.avatar} alt={displayUser.name} />
-                    <AvatarFallback className="rounded-lg">
-                      {displayUser.name.substring(0, 2).toUpperCase()}
+                    <AvatarFallback className="rounded-lg bg-sidebar-primary/10 text-sidebar-primary">
+                      {getInitials(displayUser.name)}
                     </AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
@@ -256,8 +263,8 @@ export function AdminSidebar({
                   <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                     <Avatar className="h-8 w-8 rounded-lg">
                       <AvatarImage src={displayUser.avatar} alt={displayUser.name} />
-                      <AvatarFallback className="rounded-lg">
-                        {displayUser.name.substring(0, 2).toUpperCase()}
+                      <AvatarFallback className="rounded-lg bg-sidebar-primary/10 text-sidebar-primary">
+                        {getInitials(displayUser.name)}
                       </AvatarFallback>
                     </Avatar>
                     <div className="grid flex-1 text-left text-sm leading-tight">

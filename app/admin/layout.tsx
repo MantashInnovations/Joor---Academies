@@ -34,9 +34,9 @@ export default async function AdminLayout({
   }
 
   const userData = {
-    name: profile?.full_name || user.email?.split('@')[0] || "User",
+    name: profile?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || "User",
     email: user.email || "",
-    avatar: profile?.academy_logo_url || "", 
+    avatar: user.user_metadata?.avatar_url || "", 
   }
 
   const academyData = {
