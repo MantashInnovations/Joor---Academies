@@ -76,7 +76,20 @@ export function LogoUpload({ value, onChange, disabled, className }: LogoUploadP
         )}
       </div>
 
-      <div className="flex items-center justify-center gap-2">
+      {preview && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={disabled}
+          onClick={onRemove}
+          className="text-destructive hover:bg-destructive/10 hover:text-destructive h-7 px-3 text-xs -mt-1 mb-1"
+        >
+          Remove Image
+        </Button>
+      )}
+
+      <div className="flex flex-col items-center justify-center gap-2">
         <input
           type="file"
           accept="image/*"
@@ -93,20 +106,8 @@ export function LogoUpload({ value, onChange, disabled, className }: LogoUploadP
           onClick={() => fileInputRef.current?.click()}
         >
           <Upload className="mr-2 size-4" />
-          Select Image
+          {preview ? 'Change Image' : 'Select Image'}
         </Button>
-        {preview && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={disabled}
-            onClick={onRemove}
-            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-          >
-            Remove
-          </Button>
-        )}
       </div>
       <p className="text-center text-xs text-muted-foreground">
         Square image, PNG/JPG/SVG (max 2 MB)

@@ -1,44 +1,74 @@
 'use server'
 
+import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
+import { getAuthContext } from '@/lib/auth/get-claims'
 import { revalidatePath } from 'next/cache'
+import { randomUUID } from 'node:crypto'
+
+const ProfileSchema = z.object({
+  academy_name: z.string().min(3).max(100),
+  academy_contact: z.string().min(5).max(20),
+  location: z.string().min(5).max(200),
+  website: z.string().url().optional().or(z.literal('')),
+  description: z.string().max(500).optional().or(z.literal('')),
+})
 
 export async function completeProfile(formData: FormData) {
+  // 1. AUTHENTICATE
+  const ctx = await getAuthContext()
+  if (!ctx) return { error: 'Unauthorized' }
+
+  // 2. AUTHORIZE
+  if (!['academy_admin', 'super_admin'].includes(ctx.role)) {
+    return { error: 'Forbidden' }
+  }
+
+  // 3. VALIDATE
+  const rawData = {
+    academy_name: formData.get('academy_name'),
+    academy_contact: formData.get('academy_contact'),
+    location: formData.get('location'),
+    website: formData.get('website') || '',
+    description: formData.get('description') || '',
+  }
+  
+  const logoFile = formData.get('academy_logo') as File | null;
+
+  const result = ProfileSchema.safeParse(rawData)
+  if (!result.success) {
+    return { error: 'Invalid input data.' }
+  }
+
   const supabase = await createClient()
-
-  // Verify user is logged in
-  const { data: { user }, error: userError } = await supabase.auth.getUser()
-  if (userError || !user) {
-    return { error: 'Not authenticated' }
-  }
-
-  const academy_name = formData.get('academy_name') as string
-  const academy_contact = formData.get('academy_contact') as string
-  const location = formData.get('location') as string
-  const website = formData.get('website') as string
-  const description = formData.get('description') as string
-  const academy_logo = formData.get('academy_logo') as File | null
-
-  if (!academy_name || !academy_contact || !location) {
-    return { error: 'Please fill out all required fields.' }
-  }
-
   let academy_logo_url = null
 
-  // Handle logo upload if provided
-  if (academy_logo && academy_logo.size > 0) {
-    const fileExt = academy_logo.name.split('.').pop()
-    const fileName = `${user.id}-${Math.random().toString(36).substring(2)}.${fileExt}`
-    const filePath = `${fileName}`
+  // Storage Validation (Step 3 continued)
+  if (logoFile && logoFile.size > 0) {
+    // Validate size (max 2MB)
+    if (logoFile.size > 2 * 1024 * 1024) {
+      return { error: 'Logo must be smaller than 2MB.' }
+    }
 
-    const { error: uploadError, data: uploadData } = await supabase.storage
+    // Validate MIME type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
+    if (!allowedTypes.includes(logoFile.type)) {
+      return { error: 'Only JPG, PNG and WebP are allowed.' }
+    }
+
+    const fileExt = logoFile.name.split('.').pop()
+    const fileName = `${randomUUID()}.${fileExt}`
+    // 4. SCOPE TO TENANT (using userId/academyId for path)
+    const filePath = `${ctx.userId}/${fileName}`
+
+    const { error: uploadError } = await supabase.storage
       .from('avatars')
-      .upload(filePath, academy_logo, {
+      .upload(filePath, logoFile, {
         upsert: true,
       })
 
     if (uploadError) {
-      console.error('Failed to upload logo:', uploadError)
+      console.error('Upload error:', uploadError)
       return { error: 'Failed to upload logo.' }
     }
 
@@ -47,38 +77,36 @@ export async function completeProfile(formData: FormData) {
       .getPublicUrl(filePath)
     
     academy_logo_url = publicUrl
-    console.log(`[completeProfile] Uploaded logo. Public URL: ${academy_logo_url}`)
   }
 
-  // Prepare update data
+  // 5. EXECUTE
   const updateData: any = {
-    academy_name,
-    academy_contact,
-    location,
-    website: website || null,
-    description: description || null,
+    ...result.data,
+    website: result.data.website || null,
+    description: result.data.description || null,
     is_profile_completed: true,
     updated_at: new Date().toISOString()
   }
 
-  // Only update logo if a new one was provided
   if (academy_logo_url) {
     updateData.academy_logo_url = academy_logo_url
   }
 
-  // Update the profile
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('profiles')
     .update(updateData)
-    .eq('id', user.id)
+    .eq('id', ctx.userId)
+    .select('id') // specific column
 
   if (error) {
     console.error('Failed to update profile:', error)
-    return { error: 'Failed to update profile. Please try again.' }
+    return { error: 'Update failed.' }
   }
 
-  // Revalidate the layout so the form disappears
+  if (!data || data.length === 0) {
+    return { error: 'Profile not found! Please check your database if you manually deleted rows.' }
+  }
+
   revalidatePath('/admin', 'layout')
-  
   return { success: true }
 }

@@ -26,10 +26,10 @@ export default async function AdminLayout({
     .eq('id', user.id)
     .single()
 
-  console.log(`[AdminLayout] Profile:`, profile)
+  const role = profile?.role?.toLowerCase()
 
-  if (profile?.role?.toLowerCase() !== 'academy') {
-    console.log("[AdminLayout] Role not academy, redirecting to /")
+  if (role !== 'academy' && role !== 'academy_admin') {
+    console.log(`[AdminLayout] Role '${role}' not authorized, redirecting to /`)
     redirect('/')
   }
 

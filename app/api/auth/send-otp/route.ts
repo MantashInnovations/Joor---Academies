@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/server';
 import { resend } from '@/lib/resend';
-import { createClient } from '@supabase/supabase-js';
+import { createClient as createAdminClient } from '@supabase/supabase-js';
 import { validateEmailSource } from '@/lib/email-validation';
+import { randomInt } from 'node:crypto';
+import { hashOTP } from '@/lib/crypto';
 
 export async function POST(request: Request) {
   try {
@@ -18,97 +20,80 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
+    const supabaseAdmin = createAdminClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false } }
+    );
+
     if (type === 'forgot') {
-      const supabaseAdmin = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!,
-        { auth: { persistSession: false } }
-      );
+      // 1. Check if user exists using more efficient method
+      const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+      // Though listUsers is still not ideal, getUserByEmail is better if available.
+      // Supabase Admin API has getUserById but listUsers is often used for email search if not indexed.
+      // However, we can just try to fetch the profile which is indexed by ID.
       
-      // Check if user exists in auth.users
-      const { data: adminData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
-
-      if (listError) {
-        console.error('List users error:', listError.message);
-        throw new Error('Failed to verify user existence');
-      }
-
-      const targetUser = adminData.users.find((u) => u.email === email);
+      const targetUser = users.find((u) => u.email === email);
 
       if (!targetUser) {
         console.warn('Forgot password attempt for non-existent user:', email);
+        // Security: Use generic error message if not signed up
         return NextResponse.json({ 
-          error: 'This email is not recognized. Please check your spelling or sign up.' 
-        }, { status: 404 });
+          error: 'If this email is registered, you will receive a code.' 
+        }, { status: 200 }); // Return 200 to prevent account enumeration
       }
 
-      // Check if user has a profile in public.profiles
-      const { data: profileData, error: profileError } = await supabaseAdmin
+      // Check if user has a profile
+      const { data: profile, error: profileError } = await supabaseAdmin
         .from('profiles')
         .select('id')
         .eq('id', targetUser.id)
         .single();
 
-      if (profileError || !profileData) {
-        console.warn('Forgot password attempt for user without profile:', email, profileError?.message);
+      if (profileError || !profile) {
         return NextResponse.json({ 
-          error: 'This email is not recognized. Please check your spelling or sign up.' 
-        }, { status: 404 });
+          error: 'If this email is registered, you will receive a code.' 
+        }, { status: 200 });
       }
 
-      // 3. Server-side Rate Limiting (3 attempts per 15 minutes)
-      const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-      const { data: attempts, error: countError } = await supabase
+      // 3. Server-side Rate Limiting (5 attempts per hour per skill)
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const { data: attempts } = await supabaseAdmin
         .from('otp_verifications')
         .select('created_at')
         .eq('email', email)
-        .gte('created_at', fifteenMinutesAgo)
-        .order('created_at', { ascending: true });
+        .gte('created_at', oneHourAgo)
+        .limit(6);
 
-      if (countError) {
-        console.error('Rate limit check error:', countError);
-      } else if (attempts && attempts.length >= 3) {
-        // The user can try again when the oldest attempt is older than 15 minutes
-        const oldestAttempt = new Date(attempts[0].created_at);
-        const nextAllowedAttempt = new Date(oldestAttempt.getTime() + 15 * 60 * 1000);
-        const remainingMs = nextAllowedAttempt.getTime() - Date.now();
-        
-        const remainingSecs = Math.ceil(remainingMs / 1000);
-        const mins = Math.floor(remainingSecs / 60);
-        const secs = remainingSecs % 60;
-        const timeStr = mins > 0 ? `${mins} minute${mins !== 1 ? 's' : ''} and ${secs} second${secs !== 1 ? 's' : ''}` : `${secs} second${secs !== 1 ? 's' : ''}`;
-
+      if (attempts && attempts.length >= 5) {
         return NextResponse.json({ 
-          error: `Too many attempts. Please try again after ${timeStr}.` 
+          error: 'Too many attempts. Please try again later.' 
         }, { status: 429 });
       }
     }
 
-    // Generate 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generate 6-digit OTP using cryptographically secure method
+    const otp = randomInt(100000, 999999).toString();
+    const hashedOtp = hashOTP(otp);
 
-    // Invalidate all previous OTPs for this email to ensure only the latest is valid
-    // We update them to be expired rather than deleting them to preserve rate-limit history.
-    await supabase
+    // Invalidate all previous OTPs
+    await supabaseAdmin
       .from('otp_verifications')
       .update({ expires_at: new Date().toISOString() })
       .eq('email', email)
       .gt('expires_at', new Date().toISOString());
 
-    // Store OTP in Supabase (otp_verifications table)
-    // Note: We use the public supabase client here. 
-    // If RLS is strictly "false" for public, this might fail unless service role is used.
-    // For now, we assume the user has configured access or we'll provide instructions.
-    const { error: dbError } = await supabase
+    // Store HASHED OTP
+    const { error: dbError } = await supabaseAdmin
       .from('otp_verifications')
-      .insert([{ email, code: otp }]);
+      .insert([{ email, code: hashedOtp }]);
 
     if (dbError) {
       console.error('Database error:', dbError);
-      return NextResponse.json({ error: 'Failed to store OTP' }, { status: 500 });
+      return NextResponse.json({ error: 'Failed to process request.' }, { status: 500 });
     }
 
-    // Send email via Resend (using official SDK pattern)
+    // Send email via Resend
     const { data, error: mailError } = await resend.emails.send({
       from: 'Joor <noreply@contact.tabisharshad.com>',
       to: [email],
@@ -117,31 +102,28 @@ export async function POST(request: Request) {
         <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
           <h2 style="color: #333; text-align: center;">Verify Your Account</h2>
           <p style="color: #666; font-size: 16px; line-height: 1.5;">
-            To complete your registration, please enter the following 6-digit verification code:
+            Please enter the following 6-digit verification code:
           </p>
           <div style="background: #f4f4f4; padding: 20px; text-align: center; border-radius: 8px; margin: 24px 0;">
             <span style="font-size: 32px; font-weight: bold; letter-spacing: 4px; color: #000;">${otp}</span>
           </div>
           <p style="color: #999; font-size: 14px; text-align: center;">
-            This code will expire in 10 minutes. If you didn't request this, please ignore this email.
+            This code will expire in 10 minutes.
           </p>
         </div>
       `,
     });
 
     if (mailError) {
-      console.warn('Resend failed to send email:', mailError.message);
-      console.info('------------------------------------------');
-      console.info(`DEV OTP FOR ${email}: ${otp}`);
-      console.info('------------------------------------------');
-
-      return NextResponse.json({
-        success: true,
-        debug: "Resend limit reached or unverified domain. Code logged to console."
-      });
+      console.error('Resend error:', mailError);
+      // Fallback for dev: log OTP if local
+      if (process.env.NODE_ENV === 'development') {
+        console.info(`[DEV] OTP for ${email}: ${otp}`);
+      }
+      return NextResponse.json({ error: 'Failed to send email.' }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, id: data?.id });
+    return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('Detailed Send OTP error:', {
       message: error.message,

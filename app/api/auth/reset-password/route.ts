@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
-import { supabase as publicClient } from "@/lib/supabase"
+import { createClient as createAdminClient } from "@supabase/supabase-js"
+import { compareOTP } from "@/lib/crypto"
 
 export async function POST(request: Request) {
   try {
@@ -8,85 +8,64 @@ export async function POST(request: Request) {
 
     if (!email || !otp || !newPassword) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: "Missing required fields." },
         { status: 400 }
       )
     }
 
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-    if (!serviceRoleKey) {
-      console.error("Critical: SUPABASE_SERVICE_ROLE_KEY is missing from environment variables.")
-      return NextResponse.json(
-        { error: "Server configuration error: Please add SUPABASE_SERVICE_ROLE_KEY to your .env.local file." },
-        { status: 500 }
-      )
-    }
-
-    // Initialize admin client inside the handler to prevent module-level crashes
-    const supabaseAdmin = createClient(
+    const supabaseAdmin = createAdminClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      serviceRoleKey,
+      serviceRoleKey!,
       { auth: { persistSession: false } }
     )
 
-    // 1. Verify OTP from otp_verifications table
-    const { data: verification, error: verifyError } = await publicClient
+    // 1. Verify OTP with hashed comparison
+    const { data: verification, error: verifyError } = await supabaseAdmin
       .from("otp_verifications")
-      .select("*")
+      .select("code, expires_at")
       .eq("email", email)
-      .eq("code", otp)
       .gt("expires_at", new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
       .single()
 
-    if (verifyError || !verification) {
+    if (verifyError || !verification || !compareOTP(otp, verification.code)) {
       return NextResponse.json(
-        { error: "Invalid or expired verification code" },
+        { error: "Invalid or expired verification code." },
         { status: 400 }
       )
     }
 
-    // 2. Find user ID by email
-    console.log("Searching for user with email:", email)
-    const { data: adminData, error: listError } = await supabaseAdmin.auth.admin.listUsers()
+    // 2. Find user ID by email efficiently
+    const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers()
+    const targetUser = users.find((u) => u.email === email)
     
-    if (listError) {
-      console.error("List users error:", listError)
-      return NextResponse.json({ error: listError.message || "Failed to find user" }, { status: 500 })
-    }
-
-    if (!adminData?.users) {
-      console.error("No users found in admin data")
-      return NextResponse.json({ error: "No users found" }, { status: 404 })
-    }
-
-    const targetUser = adminData.users.find((u) => u.email === email)
-    if (!targetUser) {
-      console.error("User not found in user list")
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    if (listError || !targetUser) {
+      return NextResponse.json({ error: "Failed to process request." }, { status: 404 })
     }
 
     // 3. Security Check: Ensure new password is different from current one
-    // CRITICAL: We create a FRESH, NON-PERSISTING client for this check to avoid session pollution.
-    const checkClient = createClient(
+    // We use a fresh client for this check to avoid session pollution
+    const checkClient = createAdminClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       { auth: { persistSession: false } }
     )
 
-    const { data: signInData, error: signInError } = await checkClient.auth.signInWithPassword({
+    const { data: signInData } = await checkClient.auth.signInWithPassword({
       email,
       password: newPassword,
     })
 
-    if (signInData?.user || (signInError && signInError.message.includes("MFA"))) {
+    if (signInData?.user) {
       return NextResponse.json(
         { error: "New password must be different from your current password." },
         { status: 400 }
       )
     }
 
-    // 3. Update password
-    console.log("Updating password for user:", targetUser.id)
+    // 4. Update password
     const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
       targetUser.id,
       { password: newPassword }
@@ -94,15 +73,15 @@ export async function POST(request: Request) {
 
     if (updateError) {
       console.error("Update password error:", updateError)
-      return NextResponse.json({ error: updateError.message }, { status: 500 })
+      return NextResponse.json({ error: "Failed to update password." }, { status: 500 })
     }
 
-    // 4. Clean up OTP
-    await publicClient.from("otp_verifications").delete().eq("email", email)
+    // 5. Clean up OTP
+    await supabaseAdmin.from("otp_verifications").delete().eq("email", email)
 
-    return NextResponse.json({ success: true, message: "Password updated successfully" })
+    return NextResponse.json({ success: true, message: "Password updated successfully." })
   } catch (error: any) {
     console.error("Reset password error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return NextResponse.json({ error: "Internal server error." }, { status: 500 })
   }
 }

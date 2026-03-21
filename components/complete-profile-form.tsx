@@ -58,23 +58,38 @@ export function CompleteProfileForm({ open }: { open: boolean }) {
 
   async function onSubmit(values: ProfileValues) {
     setIsSubmitting(true)
-    const formData = new FormData()
-    formData.append('academy_name', values.academy_name)
-    formData.append('academy_contact', values.academy_contact)
-    formData.append('location', values.location)
-    if (values.website) formData.append('website', values.website)
-    if (values.description) formData.append('description', values.description)
-    if (values.academy_logo instanceof File) {
-      formData.append('academy_logo', values.academy_logo)
-    }
+    
+    try {
+      const formData = new FormData()
+      formData.append('academy_name', values.academy_name)
+      formData.append('academy_contact', values.academy_contact)
+      formData.append('location', values.location)
+      
+      if (values.website) {
+        formData.append('website', values.website)
+      }
+      
+      if (values.description) {
+        formData.append('description', values.description)
+      }
+      
+      if (values.academy_logo instanceof File) {
+        formData.append('academy_logo', values.academy_logo)
+      }
 
-    const result = await completeProfile(formData)
-    if (result.error) {
-      toast.error(result.error)
+      const result = await completeProfile(formData)
+      
+      if (result.error) {
+        toast.error(result.error)
+        setIsSubmitting(false)
+      } else {
+        toast.success('Profile completed successfully!')
+        router.refresh()
+      }
+    } catch (err) {
+      console.error('Profile complete error:', err)
+      toast.error('An unexpected error occurred.')
       setIsSubmitting(false)
-    } else {
-      toast.success('Profile completed successfully!')
-      router.refresh()
     }
   }
 
@@ -182,10 +197,18 @@ export function CompleteProfileForm({ open }: { open: boolean }) {
                     render={({ field }: { field: any }) => (
                       <FormItem>
                         <FormLabel>
-                          Phone / Email <span className="text-destructive">*</span>
+                          Phone <span className="text-destructive">*</span>
                         </FormLabel>
                         <FormControl>
-                          <Input placeholder="e.g. +971 50 123 4567" {...field} />
+                          <Input 
+                            type="tel"
+                            placeholder="e.g. +971 50 123 4567" 
+                            {...field}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/[^\d+]/g, '')
+                              field.onChange(val)
+                            }}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

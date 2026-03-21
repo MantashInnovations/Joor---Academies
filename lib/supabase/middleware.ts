@@ -49,15 +49,24 @@ export async function updateSession(request: NextRequest) {
 
   // Role check for admin dashboard
   if (user && request.nextUrl.pathname.startsWith('/admin')) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
+    let role = (user.app_metadata?.role || user.user_metadata?.role || '').toLowerCase()
 
-    const role = profile?.role?.toLowerCase()
+    if (!role) {
+      console.log(`[Middleware] Role missing in JWT for ${user.email}, querying profiles table...`)
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+      role = (profile?.role || '').toLowerCase()
+    }
 
-    if (role !== 'academy') {
+    if (role === 'academy') {
+      role = 'academy_admin'
+    }
+
+    if (role !== 'academy_admin' && role !== 'super_admin') {
+      console.log(`[Middleware] Role '${role}' not authorized for /admin, redirecting`)
       const url = request.nextUrl.clone()
       url.pathname = '/'
       return NextResponse.redirect(url)
