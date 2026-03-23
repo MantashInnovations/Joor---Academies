@@ -36,20 +36,34 @@ import { MagicCard } from '@/components/ui/magic-card'
 import { RippleButton } from '@/components/ui/ripple-button'
 import { motion, AnimatePresence } from 'framer-motion'
 
-export default function StudentListClient() {
+export default function StudentListClient({
+  initialData = [],
+  initialCount = 0,
+}: {
+  initialData?: any[]
+  initialCount?: number
+}) {
   const router = useRouter()
   const [page, setPage] = useState(0)
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch] = useDebounce(searchTerm, 300)
 
+  type StudentsResult = { success: true; data: any[]; count: number }
+  const seedData: StudentsResult | undefined =
+    page === 0 && debouncedSearch === ''
+      ? { success: true, data: initialData, count: initialCount }
+      : undefined
+
   const { data, isLoading, isError } = useQuery({
     queryKey: ['students-list', page, debouncedSearch],
-    queryFn: async () => {
+    queryFn: async (): Promise<StudentsResult> => {
       const res = await getStudents({ page, search: debouncedSearch })
       if ('error' in res) throw new Error(res.error)
-      return res
+      return res as StudentsResult
     },
-    placeholderData: (prev) => prev, // keeps old data on screen while fetching next page
+    placeholderData: (prev) => prev,
+    initialData: seedData,
+    initialDataUpdatedAt: seedData ? Date.now() : undefined,
   })
 
   // Basic calculation for pagination UI
@@ -69,8 +83,8 @@ export default function StudentListClient() {
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-3">
-          <TypingAnimation 
-            as="h1" 
+          <TypingAnimation
+            as="h1"
             className="text-3xl font-bold tracking-tight"
             duration={50}
           >
@@ -82,8 +96,8 @@ export default function StudentListClient() {
           </Badge>
         </div>
         <div className="flex items-center gap-4 w-full sm:w-auto">
-          <MagicCard 
-            className="p-0 border-none bg-transparent" 
+          <MagicCard
+            className="p-0 border-none bg-transparent"
             gradientSize={120}
             gradientColor="hsl(var(--primary) / 0.1)"
           >
@@ -110,17 +124,16 @@ export default function StudentListClient() {
       </div>
 
       {/* TABLE */}
-      <div className="rounded-md border bg-card">
+      <div className="rounded-md border bg-card overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[80px]">Photo</TableHead>
-              <TableHead>Student Code</TableHead>
+              <TableHead className="w-[80px] hidden md:table-cell">Photo</TableHead>
+              <TableHead className="hidden sm:table-cell">Student Code</TableHead>
               <TableHead>Full Name</TableHead>
-              <TableHead>Parent Phone</TableHead>
-              {/* <TableHead>Classes</TableHead> Placeholder for multi-select relation */}
-              <TableHead>Enrolled On</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead className="hidden lg:table-cell">Parent Phone</TableHead>
+              <TableHead className="hidden sm:table-cell">Enrolled On</TableHead>
+              <TableHead className="hidden sm:table-cell">Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -129,12 +142,12 @@ export default function StudentListClient() {
               // Loading State Skeletons
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell><Skeleton className="h-10 w-10 rounded-full" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                  <TableCell className="hidden md:table-cell"><Skeleton className="h-10 w-10 rounded-full" /></TableCell>
+                  <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-28" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                  <TableCell><Skeleton className="h-6 w-16 rounded-full" /></TableCell>
+                  <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-28" /></TableCell>
+                  <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
+                  <TableCell className="hidden sm:table-cell"><Skeleton className="h-6 w-16 rounded-full" /></TableCell>
                   <TableCell className="text-right"><Skeleton className="h-8 w-8 ml-auto" /></TableCell>
                 </TableRow>
               ))
@@ -152,36 +165,36 @@ export default function StudentListClient() {
                     : 'ST'
 
                   return (
-                    <motion.tr 
-                      key={student.id} 
+                    <motion.tr
+                      key={student.id}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.95 }}
-                      transition={{ 
-                        duration: 0.3, 
+                      transition={{
+                        duration: 0.3,
                         delay: index * 0.05,
                         ease: "easeOut"
                       }}
                       className="group cursor-pointer hover:bg-muted/50 transition-colors border-b last:border-0"
                     >
-                      <TableCell onClick={() => handleRowClick(student.id)}>
+                      <TableCell onClick={() => handleRowClick(student.id)} className="hidden md:table-cell">
                         <Avatar className="group-hover:scale-110 transition-transform">
                           <AvatarFallback className="bg-primary/10 text-primary font-bold">{initials}</AvatarFallback>
                         </Avatar>
                       </TableCell>
-                      <TableCell onClick={() => handleRowClick(student.id)} className="font-mono text-xs font-bold text-primary/70">
+                      <TableCell onClick={() => handleRowClick(student.id)} className="font-mono text-xs font-bold text-primary/70 hidden sm:table-cell">
                         {student.student_code}
                       </TableCell>
                       <TableCell onClick={() => handleRowClick(student.id)} className="font-semibold">
                         {student.full_name}
                       </TableCell>
-                      <TableCell onClick={() => handleRowClick(student.id)} className="text-muted-foreground">
+                      <TableCell onClick={() => handleRowClick(student.id)} className="text-muted-foreground hidden lg:table-cell">
                         {student.parent_phone || 'N/A'}
                       </TableCell>
-                      <TableCell onClick={() => handleRowClick(student.id)}>
+                      <TableCell onClick={() => handleRowClick(student.id)} className="hidden sm:table-cell">
                         {student.enrollment_date ? format(new Date(student.enrollment_date), 'MMM d, yyyy') : 'N/A'}
                       </TableCell>
-                      <TableCell onClick={() => handleRowClick(student.id)}>
+                      <TableCell onClick={() => handleRowClick(student.id)} className="hidden sm:table-cell">
                         <Badge variant={student.is_active ? "default" : "secondary"} className="rounded-full px-3">
                           {student.is_active ? 'Active' : 'Inactive'}
                         </Badge>
@@ -219,7 +232,7 @@ export default function StudentListClient() {
       </div>
 
       {/* PAGINATION */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           Showing <span className="font-medium">{students.length > 0 ? page * pageSize + 1 : 0}</span> to{' '}
           <span className="font-medium">

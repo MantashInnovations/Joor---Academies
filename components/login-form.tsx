@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
+import { getEmailByCnic } from "@/app/actions/auth"
 import { Button } from "@/components/ui/button"
 import { RippleButton } from "@/components/ui/ripple-button"
 import {
@@ -52,11 +53,27 @@ export function LoginForm({
     setError(null)
 
     const formData = new FormData(e.currentTarget)
-    const email = formData.get("email") as string
+    const identifier = formData.get("email") as string
     const password = formData.get("password") as string
 
+    let loginEmail = identifier
+
+    // If identifier doesn't look like an email, assume it's a CNIC and look up the email
+    if (identifier && !identifier.includes("@")) {
+      console.log("[LoginForm] identifier looks like CNIC, looking up email...")
+      const lookup = await getEmailByCnic(identifier)
+      if (lookup.error) {
+        setError(lookup.error)
+        setLoading(false)
+        return
+      }
+      if (lookup.email) {
+        loginEmail = lookup.email
+      }
+    }
+
     const { data: { user }, error: signInError } = await supabase.auth.signInWithPassword({
-      email,
+      email: loginEmail,
       password,
     })
 
@@ -66,27 +83,48 @@ export function LoginForm({
       return
     }
 
-    // Fetch role from profiles table
-    let role = null;
+    // Fetch role from profiles table (more reliable for custom roles)
+    let role = user?.app_metadata?.role?.toLowerCase() || user?.user_metadata?.role?.toLowerCase() || null;
+    
     if (user) {
+      console.log("[Login] User authenticated. Checking profile for ID:", user.id);
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role, is_active")
         .eq("id", user.id)
         .single()
         
       if (!profileError && profile) {
+        if (profile.is_active === false) {
+          setError("Account deactivated. Please contact your administrator.")
+          setLoading(false)
+          await supabase.auth.signOut()
+          return
+        }
+        console.log("[Login] Profile found. Role:", profile.role);
         role = profile.role?.toLowerCase()
+      } else if (profileError) {
+        console.warn("[Login] Profile fetch error (using metadata fallback):", profileError.message);
       }
     }
 
-    console.debug("Login successful. Normalized role:", role)
+    console.log("[Login] Final resolved role:", role)
 
-    if (role === "academy") {
+    // Comprehensive Role Normalization (sync with middleware)
+    if (role === 'academy') role = 'academy_admin'
+    if (role === 'superuser') role = 'super_admin'
+
+    if (role === "academy_admin" || role === "super_admin") {
       console.log("Redirecting to /admin/dashboard")
       router.push("/admin/dashboard")
+    } else if (role === "teacher") {
+      console.log("Redirecting to /teacher/dashboard")
+      router.push("/teacher/dashboard")
+    } else if (role === "student") {
+      console.log("Redirecting to /student/dashboard")
+      router.push("/student/dashboard")
     } else {
-      console.log("Redirecting to / (Role not academy)")
+      console.log(`Redirecting to / (Role '${role}' not handled explicitly)`)
       router.push("/")
     }
   }
@@ -113,12 +151,12 @@ export function LoginForm({
                 </div>
               )}
               <Field>
-                <FieldLabel htmlFor="email">Email</FieldLabel>
+                <FieldLabel htmlFor="email">Email or CNIC</FieldLabel>
                 <Input
                   id="email"
                   name="email"
-                  type="email"
-                  placeholder="m@example.com"
+                  type="text"
+                  placeholder="name@example.com or 12345-6789012-3"
                   required
                 />
               </Field>

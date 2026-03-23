@@ -51,12 +51,12 @@ export default function DashboardClient() {
   return (
     <div className="flex flex-col gap-8 p-4 md:p-8 animate-in fade-in duration-500">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard Overview</h1>
-        <p className="text-muted-foreground">Welcome back! Here's what's happening in your academy today.</p>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Dashboard Overview</h1>
+        <p className="text-sm sm:text-base text-muted-foreground">Welcome back! Here's what's happening in your academy today.</p>
       </div>
 
       {/* Metric Cards Grid */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
         {isMetricsLoading ? (
           Array.from({ length: 7 }).map((_, i) => (
             <Skeleton key={i} className="h-32 w-full rounded-xl" />

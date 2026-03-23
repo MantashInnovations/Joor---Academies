@@ -54,6 +54,8 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     academyId = user.id
   }
 
+  console.log(`[AuthContext] Resolved role: '${role}', academyId: '${academyId}' for user: ${user.email}`)
+
   return {
     userId: user.id,
     email: user.email || '',

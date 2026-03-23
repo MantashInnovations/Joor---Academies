@@ -37,6 +37,8 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/in
 
 const FormSchema = z.object({
   full_name: z.string().min(1, 'Required').max(100),
+  cnic: z.string().min(1, 'Required').max(20),
+  email: z.string().email('Invalid email').min(1, 'Required'),
   date_of_birth: z.string().optional(),
   parent_name: z.string().min(1, 'Required').max(100),
   parent_phone: z.string().min(1, 'Required').max(20),
@@ -53,11 +55,13 @@ interface AddStudentDialogProps {
 export function AddStudentDialog({ trigger }: AddStudentDialogProps) {
   const [open, setOpen] = useState(false)
   const queryClient = useQueryClient()
-  
+
   const form = useForm<z.infer<typeof FormSchema>>({
     resolver: zodResolver(FormSchema),
     defaultValues: {
       full_name: '',
+      cnic: '',
+      email: '',
       date_of_birth: '',
       parent_name: '',
       parent_phone: '',
@@ -90,23 +94,19 @@ export function AddStudentDialog({ trigger }: AddStudentDialogProps) {
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-w-3xl border-none shadow-2xl bg-card/95 backdrop-blur-xl">
+      <DialogContent className="max-w-4xl border-none shadow-2xl bg-card/95 backdrop-blur-xl">
         <DialogHeader>
           <DialogTitle>New Student Enrollment</DialogTitle>
           <DialogDescription>Enter basic details to register a new student.</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pt-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
             <AnimatePresence>
               {open && (
-                <FieldGroup className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
-                    className="contents"
-                  >
+                <FieldGroup className="flex flex-col gap-4">
+                  {/* Row 1: Full Name + CNIC */}
+                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
                     <FormField
                       control={form.control}
                       name="full_name"
@@ -114,16 +114,45 @@ export function AddStudentDialog({ trigger }: AddStudentDialogProps) {
                         <Field data-invalid={!!fieldState.error}>
                           <FieldLabel>Full Name *</FieldLabel>
                           <InputGroup>
-                            <InputGroupAddon>
-                              <User className="size-4" />
-                            </InputGroupAddon>
+                            <InputGroupAddon><User className="size-4" /></InputGroupAddon>
                             <InputGroupInput placeholder="Full Name" {...field} />
                           </InputGroup>
                           <FieldError errors={[fieldState.error]} />
                         </Field>
                       )}
                     />
+                    <FormField
+                      control={form.control}
+                      name="cnic"
+                      render={({ field, fieldState }) => (
+                        <Field data-invalid={!!fieldState.error}>
+                          <FieldLabel>CNIC *</FieldLabel>
+                          <InputGroup>
+                            <InputGroupAddon><User className="size-4" /></InputGroupAddon>
+                            <InputGroupInput placeholder="xxxxx-xxxxxxx-x" {...field} />
+                          </InputGroup>
+                          <FieldError errors={[fieldState.error]} />
+                        </Field>
+                      )}
+                    />
+                  </motion.div>
 
+                  {/* Row 2: Email + Date of Birth */}
+                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                    <FormField
+                      control={form.control}
+                      name="email"
+                      render={({ field, fieldState }) => (
+                        <Field data-invalid={!!fieldState.error}>
+                          <FieldLabel>Student Email *</FieldLabel>
+                          <InputGroup>
+                            <InputGroupAddon><Mail className="size-4" /></InputGroupAddon>
+                            <InputGroupInput placeholder="student@example.com" {...field} />
+                          </InputGroup>
+                          <FieldError errors={[fieldState.error]} />
+                        </Field>
+                      )}
+                    />
                     <FormField
                       control={form.control}
                       name="date_of_birth"
@@ -131,9 +160,7 @@ export function AddStudentDialog({ trigger }: AddStudentDialogProps) {
                         <Field data-invalid={!!fieldState.error}>
                           <FieldLabel>Date of Birth</FieldLabel>
                           <InputGroup>
-                            <InputGroupAddon>
-                              <Calendar className="size-4" />
-                            </InputGroupAddon>
+                            <InputGroupAddon><Calendar className="size-4" /></InputGroupAddon>
                             <InputGroupInput type="date" {...field} />
                           </InputGroup>
                           <FieldError errors={[fieldState.error]} />
@@ -142,12 +169,8 @@ export function AddStudentDialog({ trigger }: AddStudentDialogProps) {
                     />
                   </motion.div>
 
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
-                    className="contents"
-                  >
+                  {/* Row 3: Parent Name + Parent Phone */}
+                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
                     <FormField
                       control={form.control}
                       name="parent_name"
@@ -161,7 +184,6 @@ export function AddStudentDialog({ trigger }: AddStudentDialogProps) {
                         </Field>
                       )}
                     />
-
                     <FormField
                       control={form.control}
                       name="parent_phone"
@@ -169,9 +191,7 @@ export function AddStudentDialog({ trigger }: AddStudentDialogProps) {
                         <Field data-invalid={!!fieldState.error}>
                           <FieldLabel>Parent Phone *</FieldLabel>
                           <InputGroup>
-                            <InputGroupAddon>
-                              <Phone className="size-4" />
-                            </InputGroupAddon>
+                            <InputGroupAddon><Phone className="size-4" /></InputGroupAddon>
                             <InputGroupInput placeholder="Phone Number" {...field} />
                           </InputGroup>
                           <FieldError errors={[fieldState.error]} />
@@ -180,12 +200,8 @@ export function AddStudentDialog({ trigger }: AddStudentDialogProps) {
                     />
                   </motion.div>
 
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 }}
-                    className="contents"
-                  >
+                  {/* Row 4: Parent Email + Enrollment Date */}
+                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
                     <FormField
                       control={form.control}
                       name="parent_email"
@@ -193,16 +209,13 @@ export function AddStudentDialog({ trigger }: AddStudentDialogProps) {
                         <Field data-invalid={!!fieldState.error}>
                           <FieldLabel>Parent Email</FieldLabel>
                           <InputGroup>
-                            <InputGroupAddon>
-                              <Mail className="size-4" />
-                            </InputGroupAddon>
+                            <InputGroupAddon><Mail className="size-4" /></InputGroupAddon>
                             <InputGroupInput placeholder="Email Address" {...field} />
                           </InputGroup>
                           <FieldError errors={[fieldState.error]} />
                         </Field>
                       )}
                     />
-
                     <FormField
                       control={form.control}
                       name="enrollment_date"
@@ -218,34 +231,31 @@ export function AddStudentDialog({ trigger }: AddStudentDialogProps) {
                     />
                   </motion.div>
 
-                  <motion.div 
-                    initial={{ opacity: 0, scale: 0.98 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 0.4 }}
-                    className="contents"
-                  >
+                  {/* Row 5: Address (full width) */}
+                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
                     <FormField
                       control={form.control}
                       name="address"
                       render={({ field, fieldState }) => (
-                        <Field className="col-span-full" data-invalid={!!fieldState.error}>
+                        <Field data-invalid={!!fieldState.error}>
                           <FieldLabel>Address</FieldLabel>
                           <InputGroup>
-                            <InputGroupAddon>
-                              <MapPin className="size-4" />
-                            </InputGroupAddon>
+                            <InputGroupAddon><MapPin className="size-4" /></InputGroupAddon>
                             <InputGroupInput placeholder="Home Address" {...field} />
                           </InputGroup>
                           <FieldError errors={[fieldState.error]} />
                         </Field>
                       )}
                     />
+                  </motion.div>
 
+                  {/* Row 6: Notes (full width) */}
+                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
                     <FormField
                       control={form.control}
                       name="notes"
                       render={({ field, fieldState }) => (
-                        <Field className="col-span-full" data-invalid={!!fieldState.error}>
+                        <Field data-invalid={!!fieldState.error}>
                           <FieldLabel>Notes</FieldLabel>
                           <FormControl>
                             <Textarea placeholder="Additional information..." className="min-h-[80px]" {...field} />

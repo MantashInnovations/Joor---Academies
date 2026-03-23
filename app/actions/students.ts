@@ -1,7 +1,7 @@
 'use server'
 
 import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getAuthContext } from '@/lib/auth/get-claims'
 import { revalidatePath } from 'next/cache'
 
@@ -14,6 +14,8 @@ const getStudentsSchema = z.object({
 
 const createStudentSchema = z.object({
   full_name: z.string().min(1, 'Full name is required.'),
+  cnic: z.string().min(1, 'CNIC is required.'),
+  email: z.string().email().min(1, 'Email is required.'),
   date_of_birth: z.string().optional(),
   parent_name: z.string().min(1, 'Parent name is required.'),
   parent_phone: z.string().min(1, 'Parent phone is required.'),
@@ -55,7 +57,7 @@ export async function getStudents(input: z.infer<typeof getStudentsSchema>) {
       // Use logical OR for search across name and code
       query = query.or(`full_name.ilike.%${search}%,student_code.ilike.%${search}%`)
     }
-    
+
     // Note: classFilter is omitted for now until schema relationship (classes -> students or enrollments) is clarified.
 
     const { data, count, error } = await query.range(start, end)
@@ -85,7 +87,7 @@ export async function createStudent(rawData: unknown) {
   try {
     // Generate Student Code (STU-YYYY-XXX)
     const year = new Date().getFullYear()
-    
+
     // Simple sequence logic: get the highest code for this year and academy
     const { data: latestStudent } = await supabase
       .from('students')
@@ -104,24 +106,61 @@ export async function createStudent(rawData: unknown) {
       }
     }
     const studentCode = `STU-${year}-${nextNum.toString().padStart(3, '0')}`
-    console.log('[StudentAction] Generated Code:', studentCode)
 
-    const { data, error } = await supabase
+    const adminClient = await createAdminClient()
+
+    // 1. Create Auth User for the student
+    const { data: authUser, error: authError } = await adminClient.auth.admin.createUser({
+      email: parsed.data.email,
+      password: 'Joor123',
+      email_confirm: true,
+      user_metadata: {
+        full_name: parsed.data.full_name,
+        role: 'student',
+        academy_id: aid,
+      },
+      app_metadata: {
+        role: 'student',
+        academy_id: aid,
+      },
+    })
+
+    if (authError) {
+      console.error('[StudentAction] Auth Provisioning Error:', authError)
+      if (authError.message.includes('already been registered')) {
+        return { error: `Authentication setup failed: This email is already registered. If a previous attempt failed, please delete the orphaned user from your Supabase Dashboard (Auth > Users) and try again.` }
+      }
+      return { error: `Authentication setup failed: ${authError.message}` }
+    }
+
+    // 2. Create/Update Profile record (Using upsert to handle triggers)
+    const { error: profileError } = await adminClient.from('profiles').upsert({
+      id: authUser.user.id,
+      full_name: parsed.data.full_name,
+      role: 'student',
+      cnic: parsed.data.cnic,
+      is_profile_completed: true,
+    }, { onConflict: 'id' })
+
+    if (profileError) {
+      console.error('[StudentAction] Profile Creation Error:', profileError)
+      return { error: `Profile creation failed: ${profileError.message}` }
+    }
+
+    // 3. Create Student record (Using adminClient to bypass RLS)
+    const { data, error } = await adminClient
       .from('students')
       .insert({
         ...parsed.data,
         student_code: studentCode,
         academy_id: aid,
-        // Since we don't have user_id generation yet for the student login, leave it null if it's optional
+        user_id: authUser.user.id,
       })
       .select('id, student_code')
       .single()
 
     if (error) {
       console.error('[StudentAction] Supabase Insert Error:', error)
-      if (error.code === 'PGRST204' || error.message?.includes('schema cache')) {
-        return { error: "Database table 'students' not found. Please run the restoration SQL provided in the plan." }
-      }
       return { error: `Database error: ${error.message}` }
     }
 
@@ -156,7 +195,7 @@ export async function getStudentProfile(studentId: string) {
         .eq('id', studentId)
         .eq('academy_id', aid)
         .single(),
-        
+
       // Fee Records
       supabase
         .from('fee_records')
@@ -169,14 +208,14 @@ export async function getStudentProfile(studentId: string) {
     if (studentData.error) throw studentData.error
 
     // TODO: Add attendance fetch here when attendance schema is confirmed.
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       data: {
         profile: studentData.data,
         fees: feesData.data || [],
         attendance: [] // Placeholder
-      } 
+      }
     }
   } catch (err: any) {
     console.error('[StudentAction] getStudentProfile error:', err)
@@ -206,7 +245,6 @@ export async function updateStudent(studentId: string, rawData: unknown) {
 
     if (error) throw error
 
-    revalidatePath(`/admin/students/${studentId}`)
     revalidatePath('/admin/students')
     return { success: true }
   } catch (err: any) {

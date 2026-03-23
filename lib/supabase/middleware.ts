@@ -2,23 +2,17 @@ import { createServerClient } from '@supabase/ssr'
 import { type NextRequest, NextResponse } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
-    request,
-  })
+  let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
+        getAll() { return request.cookies.getAll() },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          supabaseResponse = NextResponse.next({
-            request,
-          })
+          supabaseResponse = NextResponse.next({ request })
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           )
@@ -27,63 +21,55 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  // IMPORTANT: Avoid writing any logic between createServerClient and
-  // getUser(). A simple mistake could make it very hard to debug
-  // issues with users being randomly logged out.
+  // SECURITY: Must call getUser() — protects against CVE-2025-29927 session injection
+  const { data: { user } } = await supabase.auth.getUser()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const pathname = request.nextUrl.pathname
+  const isProtectedPath = pathname.startsWith('/admin') || pathname.startsWith('/teacher') || pathname.startsWith('/student')
 
-  console.log(`[Middleware] Path: ${request.nextUrl.pathname}, User: ${user?.email || 'None'}`)
-
-  if (
-    !user &&
-    request.nextUrl.pathname.startsWith('/admin')
-  ) {
-    console.log("[Middleware] No user found, redirecting to /login")
+  if (!user && isProtectedPath) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
-  // Role check for admin dashboard
-  if (user && request.nextUrl.pathname.startsWith('/admin')) {
-    let role = (user.app_metadata?.role || user.user_metadata?.role || '').toLowerCase()
+  if (user && isProtectedPath) {
+    // FAST PATH: role is in app_metadata (set server-side, cryptographically verified in JWT)
+    // This is the common case — no DB round-trip needed
+    let role = (user.app_metadata?.role || '').toLowerCase()
 
+    // SLOW PATH: JWT missing role — query DB as fallback (legacy users only)
     if (!role) {
-      console.log(`[Middleware] Role missing in JWT for ${user.email}, querying profiles table...`)
       const { data: profile } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role, is_active')
         .eq('id', user.id)
         .single()
+
+      if (profile?.is_active === false) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/login'
+        url.searchParams.set('error', 'Account deactivated. Contact your administrator.')
+        return NextResponse.redirect(url)
+      }
       role = (profile?.role || '').toLowerCase()
     }
 
-    if (role === 'academy') {
-      role = 'academy_admin'
-    }
+    // Normalize legacy role names
+    if (role === 'academy') role = 'academy_admin'
+    if (role === 'superuser') role = 'super_admin'
 
-    if (role !== 'academy_admin' && role !== 'super_admin') {
-      console.log(`[Middleware] Role '${role}' not authorized for /admin, redirecting`)
-      const url = request.nextUrl.clone()
-      url.pathname = '/'
-      return NextResponse.redirect(url)
+    // Route guards
+    if (pathname.startsWith('/admin') && role !== 'academy_admin' && role !== 'super_admin') {
+      return NextResponse.redirect(new URL('/', request.url))
+    }
+    if (pathname.startsWith('/teacher') && role !== 'teacher') {
+      return NextResponse.redirect(new URL('/', request.url))
+    }
+    if (pathname.startsWith('/student') && role !== 'student') {
+      return NextResponse.redirect(new URL('/', request.url))
     }
   }
-
-  // IMPORTANT: You *must* return the supabaseResponse object as is. If you're creating a
-  // new response object with NextResponse.next() make sure to:
-  // 1. Pass the request in it, like so:
-  //    const myNewResponse = NextResponse.next({ request })
-  // 2. Copy over the cookies, like so:
-  //    myNewResponse.cookies.setAll(supabaseResponse.cookies.getAll())
-  // 3. Change the myNewResponse object to fit your needs, but avoid modifying
-  //    the cookies!
-  // 4. Finally, return myNewResponse.
-  // If this is not done, you may be causing the browser and server to go out
-  // of sync and terminate the user's session.
 
   return supabaseResponse
 }

@@ -34,7 +34,7 @@ export async function getDashboardMetrics() {
       // 1. Total Active Students
       supabase.from('students').select('*', { count: 'exact', head: true }).eq('academy_id', aid).eq('is_active', true),
       // 2. Total Teachers
-      supabase.from('users').select('*', { count: 'exact', head: true }).eq('academy_id', aid).eq('role', 'teacher'),
+      supabase.from('teachers').select('*', { count: 'exact', head: true }).eq('academy_id', aid),
       // 3. Active Classes
       supabase.from('classes').select('*', { count: 'exact', head: true }).eq('academy_id', aid).eq('is_active', true),
       // 4. Monthly Revenue (Current Month)
