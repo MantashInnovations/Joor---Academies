@@ -47,6 +47,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { usePathname, useRouter } from "next/navigation"
+import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 
 const data = {
@@ -175,33 +176,36 @@ export function AdminSidebar({
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <a href="/admin/dashboard">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground overflow-hidden">
-                  {isStringLogo ? (
-                    <img 
-                      src={displayAcademy.logo as string} 
-                      alt={displayAcademy.name} 
-                      className="size-full object-cover" 
-                      onError={(e) => {
-                        console.error("[AdminSidebar] Logo failed to load:", displayAcademy.logo)
-                        // If logo fails to load, fallback to default icon
-                        e.currentTarget.style.display = 'none'
-                      }}
-                    />
-                  ) : AcademyLogo ? (
-                    <AcademyLogo className="size-4" />
-                  ) : (
-                    <div className="size-4" />
-                  )}
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold text-sidebar-foreground">
-                    {displayAcademy.name}
-                  </span>
-                  <span className="truncate text-xs text-muted-foreground/70">Academy Admin</span>
-                </div>
-              </a>
+            <SidebarMenuButton 
+              size="lg" 
+              onClick={(e) => {
+                e.preventDefault()
+                router.push("/admin/dashboard")
+              }}
+            >
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground overflow-hidden">
+                {isStringLogo ? (
+                  <img 
+                    src={displayAcademy.logo as string} 
+                    alt={displayAcademy.name} 
+                    className="size-full object-cover" 
+                    onError={(e) => {
+                      console.error("[AdminSidebar] Logo failed to load:", displayAcademy.logo)
+                      e.currentTarget.style.display = 'none'
+                    }}
+                  />
+                ) : AcademyLogo ? (
+                  <AcademyLogo className="size-4" />
+                ) : (
+                  <div className="size-4" />
+                )}
+              </div>
+              <div className="grid flex-1 text-left text-sm leading-tight">
+                <span className="truncate font-semibold text-sidebar-foreground">
+                  {displayAcademy.name}
+                </span>
+                <span className="truncate text-xs text-muted-foreground/70">Academy Admin</span>
+              </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -215,14 +219,15 @@ export function AdminSidebar({
                 {group.items.map((item) => (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
-                      asChild
                       isActive={pathname === item.url}
                       tooltip={item.title}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        router.push(item.url)
+                      }}
                     >
-                      <a href={item.url}>
-                        <item.icon className="size-4" />
-                        <span>{item.title}</span>
-                      </a>
+                      <item.icon className="size-4" />
+                      <span>{item.title}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}

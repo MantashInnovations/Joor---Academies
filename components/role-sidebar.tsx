@@ -41,6 +41,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { usePathname, useRouter } from "next/navigation"
+import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 
 export type NavItem = {
@@ -164,14 +165,15 @@ export function RoleSidebar({
                 {group.items.map((item) => (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
-                      asChild
                       isActive={pathname === item.url}
                       tooltip={item.title}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        router.push(item.url)
+                      }}
                     >
-                      <a href={item.url}>
-                        <item.icon className="size-4" />
-                        <span>{item.title}</span>
-                      </a>
+                      <item.icon className="size-4" />
+                      <span>{item.title}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
