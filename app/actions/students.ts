@@ -15,11 +15,11 @@ const getStudentsSchema = z.object({
 const createStudentSchema = z.object({
   full_name: z.string().min(1, 'Full name is required.'),
   cnic: z.string().min(1, 'CNIC is required.'),
-  email: z.string().email().min(1, 'Email is required.'),
+  email: z.string().email().min(1, 'Email is required.').transform(v => v.toLowerCase()),
   date_of_birth: z.string().optional(),
   parent_name: z.string().min(1, 'Parent name is required.'),
   parent_phone: z.string().min(1, 'Parent phone is required.'),
-  parent_email: z.string().email().optional().or(z.literal('')),
+  parent_email: z.string().email().optional().or(z.literal('')).transform(v => v?.toLowerCase()),
   address: z.string().optional(),
   enrollment_date: z.string().min(1, 'Enrollment date is required.'),
   notes: z.string().optional(),

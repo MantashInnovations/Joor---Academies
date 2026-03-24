@@ -8,7 +8,8 @@ import { hashOTP } from '@/lib/crypto';
 
 export async function POST(request: Request) {
   try {
-    const { email, type } = await request.json();
+    let { email, type } = await request.json();
+    email = email?.toLowerCase();
 
     if (!email) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });

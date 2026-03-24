@@ -36,7 +36,7 @@ export function SignupForm({
     setError(null)
 
     const formData = new FormData(e.currentTarget)
-    const email = formData.get("email") as string
+    const email = (formData.get("email") as string)?.toLowerCase()
     const password = formData.get("password") as string
     const fullName = formData.get("name") as string
     const confirmPassword = formData.get("confirm-password") as string

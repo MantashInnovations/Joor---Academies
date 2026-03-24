@@ -9,7 +9,7 @@ const createTeacherSchema = z.object({
   first_name: z.string().min(1, 'First name is required.'),
   last_name: z.string().min(1, 'Last name is required.'),
   cnic: z.string().min(1, 'CNIC is required.'),
-  email: z.string().email('Invalid email').min(1, 'Required'),
+  email: z.string().email('Invalid email').min(1, 'Required').transform(v => v.toLowerCase()),
   phone: z.string().min(1, 'Phone is required.'),
   whatsapp_no: z.string().optional(),
   age: z.coerce.number().optional(),

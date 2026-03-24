@@ -50,7 +50,7 @@ export function ForgotPasswordForm({
     try {
       const response = await fetch("/api/auth/send-otp", {
         method: "POST",
-        body: JSON.stringify({ email, type: "forgot" }),
+        body: JSON.stringify({ email: email.toLowerCase(), type: "forgot" }),
         headers: { "Content-Type": "application/json" },
       })
 

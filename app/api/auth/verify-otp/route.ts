@@ -4,7 +4,8 @@ import { compareOTP } from '@/lib/crypto';
 
 export async function POST(request: Request) {
   try {
-    const { email, code, shouldDelete = true } = await request.json();
+    let { email, code, shouldDelete = true } = await request.json();
+    email = email?.toLowerCase();
 
     if (!email || !code) {
       return NextResponse.json({ error: 'Verification required.' }, { status: 400 });

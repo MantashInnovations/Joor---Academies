@@ -25,7 +25,7 @@ export function VerificationForm({
 }: React.ComponentProps<"div">) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const email = searchParams.get("email")
+  const email = searchParams.get("email")?.toLowerCase()
   const [loading, setLoading] = useState(false)
   const [resending, setResending] = useState(false)
   const [error, setError] = useState<string | null>(null)

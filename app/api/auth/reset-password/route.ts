@@ -4,7 +4,8 @@ import { compareOTP } from "@/lib/crypto"
 
 export async function POST(request: Request) {
   try {
-    const { email, otp, newPassword } = await request.json()
+    let { email, otp, newPassword } = await request.json()
+    email = email?.toLowerCase()
 
     if (!email || !otp || !newPassword) {
       return NextResponse.json(
