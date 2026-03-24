@@ -116,8 +116,8 @@ export default function TeachersClient({
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-3">
-          <TypingAnimation 
-            as="h1" 
+          <TypingAnimation
+            as="h1"
             className="text-3xl font-bold tracking-tight"
             duration={50}
           >
@@ -130,8 +130,8 @@ export default function TeachersClient({
           </Badge>
         </div>
         <div className="flex items-center gap-4 w-full sm:w-auto">
-          <MagicCard 
-            className="p-0 border-none bg-transparent" 
+          <MagicCard
+            className="p-0 border-none bg-transparent"
             gradientSize={120}
             gradientColor="hsl(var(--primary) / 0.1)"
           >
@@ -140,7 +140,7 @@ export default function TeachersClient({
               <Input
                 type="search"
                 placeholder="Search teachers..."
-                className="pl-8 bg-card/50 border-white/10"
+                className="pl-8 bg-background sm:bg-card/50 border-white/10"
                 value={searchTerm}
                 onChange={(e) => {
                   setSearchTerm(e.target.value)
@@ -150,7 +150,7 @@ export default function TeachersClient({
             </div>
           </MagicCard>
           <AddTeacherDialog trigger={
-            <RippleButton className="h-10 px-4 bg-primary text-primary-foreground border-none shadow-lg shadow-primary/20">
+            <RippleButton className="h-10 px-4 bg-primary text-primary-foreground border-none shadow-lg shadow-primary/20 text-xs sm:text-sm">
               Add Teacher
             </RippleButton>
           } />
@@ -213,13 +213,13 @@ export default function TeachersClient({
                   const initials = `${teacher.first_name?.[0] || ''}${teacher.last_name?.[0] || ''}`.toUpperCase() || 'TR'
 
                   return (
-                    <motion.tr 
-                      key={teacher.id} 
+                    <motion.tr
+                      key={teacher.id}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.95 }}
-                      transition={{ 
-                        duration: 0.3, 
+                      transition={{
+                        duration: 0.3,
                         delay: index * 0.05,
                         ease: "easeOut"
                       }}
@@ -263,22 +263,22 @@ export default function TeachersClient({
                             <DropdownMenuItem onClick={() => handleRowClick(teacher.id)}>
                               <Eye className="mr-2 h-4 w-4" /> View Schedule
                             </DropdownMenuItem>
-                            
-                            <AddTeacherDialog 
-                              teacher={teacher} 
+
+                            <AddTeacherDialog
+                              teacher={teacher}
                               trigger={
                                 <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                                   <Edit className="mr-2 h-4 w-4" /> Edit Details
                                 </DropdownMenuItem>
-                              } 
+                              }
                             />
 
                             <DropdownMenuSeparator />
-                            
+
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
-                                <DropdownMenuItem 
-                                  onSelect={(e) => e.preventDefault()} 
+                                <DropdownMenuItem
+                                  onSelect={(e) => e.preventDefault()}
                                   className={teacher.is_active ? "text-destructive" : "text-primary"}
                                 >
                                   {teacher.is_active ? (
@@ -294,14 +294,14 @@ export default function TeachersClient({
                                     {teacher.is_active ? 'Deactivate Teacher?' : 'Reactivate Teacher?'}
                                   </AlertDialogTitle>
                                   <AlertDialogDescription>
-                                    {teacher.is_active 
-                                      ? `This will prevent ${teacher.first_name} ${teacher.last_name} from logging into the teacher portal.` 
+                                    {teacher.is_active
+                                      ? `This will prevent ${teacher.first_name} ${teacher.last_name} from logging into the teacher portal.`
                                       : `This will restore ${teacher.first_name} ${teacher.last_name}'s access to the teacher portal.`}
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                   <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction 
+                                  <AlertDialogAction
                                     className={teacher.is_active ? "bg-destructive text-destructive-foreground" : "bg-primary text-primary-foreground"}
                                     onClick={() => handleStatusToggle(teacher.id, teacher.is_active)}
                                   >

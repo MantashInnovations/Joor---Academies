@@ -106,7 +106,7 @@ export default function StudentListClient({
               <Input
                 type="search"
                 placeholder="Search resources..."
-                className="pl-8 bg-card/50 border-white/10"
+                className="pl-8 bg-background sm:bg-card/50 border-white/10"
                 value={searchTerm}
                 onChange={(e) => {
                   setSearchTerm(e.target.value)
@@ -116,7 +116,7 @@ export default function StudentListClient({
             </div>
           </MagicCard>
           <AddStudentDialog trigger={
-            <RippleButton className="h-10 px-4 bg-primary text-primary-foreground border-none shadow-lg shadow-primary/20">
+            <RippleButton className="h-10 px-4 bg-primary text-primary-foreground border-none shadow-lg shadow-primary/20 text-xs sm:text-sm">
               Add Student
             </RippleButton>
           } />
