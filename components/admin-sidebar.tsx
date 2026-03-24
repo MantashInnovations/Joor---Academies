@@ -49,6 +49,7 @@ import {
 import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import { AcademySwitcher } from "@/components/academy-switcher"
 
 const data = {
   user: {
@@ -174,41 +175,12 @@ export function AdminSidebar({
   return (
     <Sidebar variant="inset" {...props}>
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton 
-              size="lg" 
-              onClick={(e) => {
-                e.preventDefault()
-                router.push("/admin/dashboard")
-              }}
-            >
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground overflow-hidden">
-                {isStringLogo ? (
-                  <img 
-                    src={displayAcademy.logo as string} 
-                    alt={displayAcademy.name} 
-                    className="size-full object-cover" 
-                    onError={(e) => {
-                      console.error("[AdminSidebar] Logo failed to load:", displayAcademy.logo)
-                      e.currentTarget.style.display = 'none'
-                    }}
-                  />
-                ) : AcademyLogo ? (
-                  <AcademyLogo className="size-4" />
-                ) : (
-                  <div className="size-4" />
-                )}
-              </div>
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold text-sidebar-foreground">
-                  {displayAcademy.name}
-                </span>
-                <span className="truncate text-xs text-muted-foreground/70">Academy Admin</span>
-              </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <AcademySwitcher
+          currentAcademy={{
+            name: displayAcademy.name,
+            logo: displayAcademy.logo || null,
+          }}
+        />
       </SidebarHeader>
       <SidebarContent>
         {data.navMain.map((group) => (

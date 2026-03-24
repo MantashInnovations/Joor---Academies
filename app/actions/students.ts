@@ -4,6 +4,9 @@ import { z } from 'zod'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getAuthContext } from '@/lib/auth/get-claims'
 import { revalidatePath } from 'next/cache'
+import { randomUUID } from 'node:crypto'
+import { sendSyncInvitationEmail } from '@/lib/emails/sync-invitation'
+import { headers } from 'next/headers'
 
 // --- SCHEMAS ---
 const getStudentsSchema = z.object({
@@ -109,23 +112,101 @@ export async function createStudent(rawData: unknown) {
 
     const adminClient = await createAdminClient()
 
-    // 1. Tenant Uniqueness Check
-    const { data: existingProfile } = await adminClient
+    // 1. Tenant Uniqueness Check — within THIS academy
+    const { data: existingInAcademy } = await adminClient
       .from('profiles')
       .select('id')
       .eq('email', parsed.data.email)
       .eq('academy_id', aid)
       .single()
 
-    if (existingProfile) {
+    if (existingInAcademy) {
       return { error: 'A student with this email address already exists in your academy.' }
     }
 
-    // 2. Generate Auth Alias
+    // 2. Check if a pending invitation already exists
+    const { data: existingInvite } = await adminClient
+      .from('academy_invitations')
+      .select('id')
+      .eq('email', parsed.data.email)
+      .eq('academy_id', aid)
+      .eq('status', 'pending')
+      .single()
+
+    if (existingInvite) {
+      return { error: 'An invitation has already been sent to this email for your academy.' }
+    }
+
+    // 3. Cross-Academy Check — does this email exist in OTHER academies?
+    const { data: otherProfiles } = await adminClient
+      .from('profiles')
+      .select('id, academy_id, full_name')
+      .eq('email', parsed.data.email)
+      .neq('academy_id', aid)
+      .limit(1)
+
+    if (otherProfiles && otherProfiles.length > 0) {
+      // --- INVITATION FLOW ---
+      const token = randomUUID()
+
+      const { data: invitingAcademy } = await adminClient
+        .from('profiles')
+        .select('academy_name')
+        .eq('id', aid)
+        .single()
+
+      const { data: existingAcademy } = await adminClient
+        .from('profiles')
+        .select('academy_name')
+        .eq('id', otherProfiles[0].academy_id)
+        .single()
+
+      const { error: inviteError } = await adminClient
+        .from('academy_invitations')
+        .insert({
+          email: parsed.data.email,
+          academy_id: aid,
+          role: 'student',
+          token,
+          payload: { ...parsed.data, student_code: studentCode },
+          invited_by: ctx.userId,
+        })
+
+      if (inviteError) {
+        console.error('[StudentAction] Invitation Error:', inviteError)
+        return { error: 'Failed to create invitation.' }
+      }
+
+      const headersList = await headers()
+      const host = headersList.get('host') || 'localhost:3000'
+      const protocol = headersList.get('x-forwarded-proto') || 'http'
+      const baseUrl = `${protocol}://${host}`
+
+      await sendSyncInvitationEmail({
+        to: parsed.data.email,
+        inviteeName: parsed.data.full_name,
+        invitingAcademyName: invitingAcademy?.academy_name || 'New Academy',
+        existingAcademyName: existingAcademy?.academy_name || 'Existing Academy',
+        role: 'student',
+        token,
+        baseUrl,
+      })
+
+      revalidatePath('/admin/students')
+      return {
+        success: true,
+        invited: true,
+        message: `An invitation email has been sent to ${parsed.data.email}. They need to accept it to join your academy.`,
+      }
+    }
+
+    // --- NORMAL FLOW ---
+
+    // 4. Generate Auth Alias
     const [localPart, domain] = parsed.data.email.split('@')
     const authAlias = `${localPart}+${aid}@${domain}`
 
-    // 3. Create Auth User for the student
+    // 5. Create Auth User for the student
     const { data: authUser, error: authError } = await adminClient.auth.admin.createUser({
       email: authAlias,
       password: 'Joor123',
@@ -143,27 +224,27 @@ export async function createStudent(rawData: unknown) {
 
     if (authError) {
       console.error('[StudentAction] Auth Provisioning Error:', authError)
-      return { error: `Authentication setup failed: ${authError.message}` }
+      return { error: 'Authentication setup failed.' }
     }
 
-    // 2. Create/Update Profile record (Using upsert to handle triggers)
+    // 6. Create/Update Profile record
     const { error: profileError } = await adminClient.from('profiles').upsert({
       id: authUser.user.id,
       full_name: parsed.data.full_name,
-      email: parsed.data.email, // Save real email to profile
+      email: parsed.data.email,
       role: 'student',
       cnic: parsed.data.cnic,
-      academy_id: aid, // explicitly set
+      academy_id: aid,
       is_profile_completed: true,
       is_active: true,
     }, { onConflict: 'id' })
 
     if (profileError) {
       console.error('[StudentAction] Profile Creation Error:', profileError)
-      return { error: `Profile creation failed: ${profileError.message}` }
+      return { error: 'Profile creation failed.' }
     }
 
-    // 3. Create Student record (Using adminClient to bypass RLS)
+    // 7. Create Student record
     const { data, error } = await adminClient
       .from('students')
       .insert({
@@ -177,14 +258,14 @@ export async function createStudent(rawData: unknown) {
 
     if (error) {
       console.error('[StudentAction] Supabase Insert Error:', error)
-      return { error: `Database error: ${error.message}` }
+      return { error: 'Failed to create student record.' }
     }
 
     revalidatePath('/admin/students')
     return { success: true, data }
   } catch (err: any) {
     console.error('[StudentAction] createStudent unexpected error:', err)
-    return { error: 'An unexpected error occurred. Please check your network or database connection.' }
+    return { error: 'An unexpected error occurred.' }
   }
 }
 

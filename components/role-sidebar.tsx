@@ -43,6 +43,7 @@ import {
 import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import { AcademySwitcher } from "@/components/academy-switcher"
 
 export type NavItem = {
   title: string
@@ -136,25 +137,12 @@ export function RoleSidebar({
   return (
     <Sidebar variant="inset" {...props}>
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <div className="flex items-center gap-3 cursor-pointer">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground overflow-hidden">
-                  {isStringLogo ? (
-                    <img src={academy?.logo as string} alt={academy?.name} className="size-full object-cover" />
-                  ) : <AcademyLogo className="size-4" />}
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold text-sidebar-foreground">
-                    {academy?.name || "Joor Academy"}
-                  </span>
-                  <span className="truncate text-xs text-muted-foreground/70">{roleName}</span>
-                </div>
-              </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <AcademySwitcher
+          currentAcademy={{
+            name: academy?.name || "Joor Academy",
+            logo: academy?.logo || null,
+          }}
+        />
       </SidebarHeader>
       <SidebarContent>
         {navMain.map((group) => (

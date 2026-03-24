@@ -4,6 +4,9 @@ import { z } from 'zod'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getAuthContext } from '@/lib/auth/get-claims'
 import { revalidatePath } from 'next/cache'
+import { randomUUID } from 'node:crypto'
+import { sendSyncInvitationEmail } from '@/lib/emails/sync-invitation'
+import { headers } from 'next/headers'
 
 const createTeacherSchema = z.object({
   first_name: z.string().min(1, 'First name is required.'),
@@ -35,23 +38,105 @@ export async function createTeacher(rawData: unknown) {
   const fullName = `${first_name} ${last_name}`
 
   try {
-    // 1. Tenant Uniqueness Check
-    const { data: existingProfile } = await adminClient
+    // 1. Tenant Uniqueness Check — within THIS academy
+    const { data: existingInAcademy } = await adminClient
       .from('profiles')
       .select('id')
       .eq('email', email)
       .eq('academy_id', aid)
       .single()
 
-    if (existingProfile) {
+    if (existingInAcademy) {
       return { error: 'A user with this email already exists in your academy.' }
     }
 
-    // 2. Generate Auth Alias
+    // 2. Check if a pending invitation already exists
+    const { data: existingInvite } = await adminClient
+      .from('academy_invitations')
+      .select('id')
+      .eq('email', email)
+      .eq('academy_id', aid)
+      .eq('status', 'pending')
+      .single()
+
+    if (existingInvite) {
+      return { error: 'An invitation has already been sent to this email for your academy.' }
+    }
+
+    // 3. Cross-Academy Check — does this email exist in OTHER academies?
+    const { data: otherProfiles } = await adminClient
+      .from('profiles')
+      .select('id, academy_id, full_name')
+      .eq('email', email)
+      .neq('academy_id', aid)
+      .limit(1)
+
+    if (otherProfiles && otherProfiles.length > 0) {
+      // --- INVITATION FLOW ---
+      // This email is used in another academy. Send an invitation instead.
+      const token = randomUUID()
+
+      // Get names for the email
+      const { data: invitingAcademy } = await adminClient
+        .from('profiles')
+        .select('academy_name')
+        .eq('id', aid)
+        .single()
+
+      const { data: existingAcademy } = await adminClient
+        .from('profiles')
+        .select('academy_name')
+        .eq('id', otherProfiles[0].academy_id)
+        .single()
+
+      // Store the invitation with full form payload
+      const { error: inviteError } = await adminClient
+        .from('academy_invitations')
+        .insert({
+          email,
+          academy_id: aid,
+          role: 'teacher',
+          token,
+          payload: parsed.data,
+          invited_by: ctx.userId,
+        })
+
+      if (inviteError) {
+        console.error('[TeacherAction] Invitation Error:', inviteError)
+        return { error: 'Failed to create invitation.' }
+      }
+
+      // Send the sync email
+      const headersList = await headers()
+      const host = headersList.get('host') || 'localhost:3000'
+      const protocol = headersList.get('x-forwarded-proto') || 'http'
+      const baseUrl = `${protocol}://${host}`
+
+      await sendSyncInvitationEmail({
+        to: email,
+        inviteeName: fullName,
+        invitingAcademyName: invitingAcademy?.academy_name || 'New Academy',
+        existingAcademyName: existingAcademy?.academy_name || 'Existing Academy',
+        role: 'teacher',
+        token,
+        baseUrl,
+      })
+
+      revalidatePath('/admin/teachers')
+      return { 
+        success: true, 
+        invited: true, 
+        message: `An invitation email has been sent to ${email}. They need to accept it to join your academy.` 
+      }
+    }
+
+    // --- NORMAL FLOW (no cross-academy conflict) ---
+
+    // 4. Generate Auth Alias
     const [localPart, domain] = email.split('@')
     const authAlias = `${localPart}+${aid}@${domain}`
 
-    // 3. Create Auth User
+    // 5. Create Auth User
     const { data: authUser, error: authError } = await adminClient.auth.admin.createUser({
       email: authAlias,
       password: 'Joor123',
@@ -69,39 +154,38 @@ export async function createTeacher(rawData: unknown) {
 
     if (authError) {
       console.error('[TeacherAction] Auth Provisioning Error:', authError)
-      return { error: `Authentication setup failed: ${authError.message}` }
+      return { error: 'Authentication setup failed.' }
     }
 
-    // 2. Create/Update Profile (Using upsert to handle triggers that might auto-create profiles)
+    // 6. Create/Update Profile
     const { error: profileError } = await adminClient.from('profiles').upsert({
       id: authUser.user.id,
       first_name,
       last_name,
       full_name: fullName,
-      email: email, // Save real email to profile
+      email,
       role: 'teacher',
-      cnic: cnic,
-      academy_id: aid, // explicitly set
+      cnic,
+      academy_id: aid,
       is_profile_completed: true,
       is_active: true,
     }, { onConflict: 'id' })
 
     if (profileError) {
       console.error('[TeacherAction] Profile Creation Error:', profileError)
-      return { error: `Profile creation failed: ${profileError.message}` }
+      return { error: 'Profile creation failed.' }
     }
 
-    // 3. Create Teacher (Using adminClient to bypass RLS)
+    // 7. Create Teacher record
     const { data, error } = await adminClient.from('teachers').insert({
       ...parsed.data,
       user_id: authUser.user.id,
       academy_id: aid,
-      // specialization, phone, etc. are included in parsed.data
     }).select('id').single()
 
     if (error) {
       console.error('[TeacherAction] DB Insert Error:', error)
-      return { error: `Database error: ${error.message}` }
+      return { error: 'Failed to create teacher record.' }
     }
 
     revalidatePath('/admin/teachers')

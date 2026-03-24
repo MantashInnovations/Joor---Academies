@@ -35,7 +35,7 @@ export async function getAuthEmailByEmail(email: string) {
   // Find profiles with this exact email
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, academy_id, role, is_active')
+    .select('id, academy_id, role, is_active, last_active_at')
     .eq('email', email)
 
   if (error) {
@@ -47,19 +47,31 @@ export async function getAuthEmailByEmail(email: string) {
     return { authEmail: email }
   }
 
+// Find the correct profile to use
+  let targetProfile = data[0]
+
   if (data.length > 1) {
-    return { 
-      error: 'This email is associated with multiple academies. Please log in using your CNIC instead.' 
-    }
+    // Multi-academy user: pick the last visited academy
+    targetProfile = data.sort((a, b) => {
+      const timeA = a.last_active_at ? new Date(a.last_active_at).getTime() : 0
+      const timeB = b.last_active_at ? new Date(b.last_active_at).getTime() : 0
+      return timeB - timeA // Descending: newest first
+    })[0]
   }
 
-  // Exactly one profile found. Resolve their actual auth.users email using the admin client.
-  const profileId = data[0].id
+  // Resolve their actual auth.users email using the admin client.
+  const profileId = targetProfile.id
   const { data: userData, error: userError } = await supabase.auth.admin.getUserById(profileId)
   
   if (userError || !userData.user) {
      return { error: 'Authentication record not found for this profile' }
   }
 
-  return { authEmail: userData.user.email }
+  // Update last_active_at for the logged in profile
+  await supabase
+    .from('profiles')
+    .update({ last_active_at: new Date().toISOString() })
+    .eq('id', profileId)
+
+  return { authEmail: userData.user.email, profile: targetProfile }
 }
