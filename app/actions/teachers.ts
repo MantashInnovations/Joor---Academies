@@ -78,9 +78,12 @@ export async function createTeacher(rawData: unknown) {
       first_name,
       last_name,
       full_name: fullName,
+      email: email, // Save real email to profile
       role: 'teacher',
       cnic: cnic,
+      academy_id: aid, // explicitly set
       is_profile_completed: true,
+      is_active: true,
     }, { onConflict: 'id' })
 
     if (profileError) {
@@ -109,10 +112,10 @@ export async function createTeacher(rawData: unknown) {
   }
 }
 
-export async function getTeachers(params: { 
-  page?: number; 
-  search?: string; 
-  status?: 'active' | 'inactive' | 'all' 
+export async function getTeachers(params: {
+  page?: number;
+  search?: string;
+  status?: 'active' | 'inactive' | 'all'
 } = {}) {
   const { page = 0, search = '', status = 'active' } = params
   const ctx = await getAuthContext()
@@ -182,6 +185,7 @@ export async function updateTeacher(id: string, rawData: unknown) {
           first_name,
           last_name,
           full_name: `${first_name ?? ''} ${last_name ?? ''}`.trim(),
+          email: email, // Sync email if changed
         })
         .eq('id', teacher.user_id)
 

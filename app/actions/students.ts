@@ -150,9 +150,12 @@ export async function createStudent(rawData: unknown) {
     const { error: profileError } = await adminClient.from('profiles').upsert({
       id: authUser.user.id,
       full_name: parsed.data.full_name,
+      email: parsed.data.email, // Save real email to profile
       role: 'student',
       cnic: parsed.data.cnic,
+      academy_id: aid, // explicitly set
       is_profile_completed: true,
+      is_active: true,
     }, { onConflict: 'id' })
 
     if (profileError) {
