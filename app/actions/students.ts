@@ -109,9 +109,25 @@ export async function createStudent(rawData: unknown) {
 
     const adminClient = await createAdminClient()
 
-    // 1. Create Auth User for the student
+    // 1. Tenant Uniqueness Check
+    const { data: existingProfile } = await adminClient
+      .from('profiles')
+      .select('id')
+      .eq('email', parsed.data.email)
+      .eq('academy_id', aid)
+      .single()
+
+    if (existingProfile) {
+      return { error: 'A student with this email address already exists in your academy.' }
+    }
+
+    // 2. Generate Auth Alias
+    const [localPart, domain] = parsed.data.email.split('@')
+    const authAlias = `${localPart}+${aid}@${domain}`
+
+    // 3. Create Auth User for the student
     const { data: authUser, error: authError } = await adminClient.auth.admin.createUser({
-      email: parsed.data.email,
+      email: authAlias,
       password: 'Joor123',
       email_confirm: true,
       user_metadata: {
@@ -127,9 +143,6 @@ export async function createStudent(rawData: unknown) {
 
     if (authError) {
       console.error('[StudentAction] Auth Provisioning Error:', authError)
-      if (authError.message.includes('already been registered')) {
-        return { error: `Authentication setup failed: This email is already registered. If a previous attempt failed, please delete the orphaned user from your Supabase Dashboard (Auth > Users) and try again.` }
-      }
       return { error: `Authentication setup failed: ${authError.message}` }
     }
 
@@ -237,6 +250,57 @@ export async function updateStudent(studentId: string, rawData: unknown) {
   const aid = ctx.academyId
 
   try {
+    // Fetch student to get user_id to sync profile and auth
+    const { data: student, error: fetchError } = await supabase
+      .from('students')
+      .select('user_id')
+      .eq('id', studentId)
+      .eq('academy_id', aid)
+      .single()
+
+    if (fetchError || !student) return { error: 'Student not found or unauthorized' }
+
+    const adminClient = await createAdminClient()
+    const { full_name, email, cnic } = parsed.data
+
+    // Sync Profile
+    if (full_name || email || cnic) {
+      const updateData: any = {}
+      if (full_name) updateData.full_name = full_name
+      if (email) updateData.email = email
+      if (cnic) updateData.cnic = cnic
+
+      const { error: profileError } = await adminClient
+        .from('profiles')
+        .update(updateData)
+        .eq('id', student.user_id)
+
+      if (profileError) console.error('[StudentAction] Profile Update Error:', profileError)
+    }
+
+    // Sync Auth Email and check tenant uniqueness
+    if (email) {
+      const { data: existingProfile } = await adminClient
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .eq('academy_id', aid)
+        .neq('id', student.user_id)
+        .single()
+
+      if (existingProfile) {
+        return { error: 'A student with this email address already exists in your academy.' }
+      }
+
+      const [localPart, domain] = email.split('@')
+      const authAlias = `${localPart}+${aid}@${domain}`
+
+      const { error: authError } = await adminClient.auth.admin.updateUserById(student.user_id, {
+        email: authAlias,
+      })
+      if (authError) console.error('[StudentAction] Auth Email Update Error:', authError)
+    }
+
     const { error } = await supabase
       .from('students')
       .update(parsed.data)

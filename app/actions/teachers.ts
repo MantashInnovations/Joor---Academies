@@ -35,9 +35,25 @@ export async function createTeacher(rawData: unknown) {
   const fullName = `${first_name} ${last_name}`
 
   try {
-    // 1. Create Auth User
+    // 1. Tenant Uniqueness Check
+    const { data: existingProfile } = await adminClient
+      .from('profiles')
+      .select('id')
+      .eq('email', email)
+      .eq('academy_id', aid)
+      .single()
+
+    if (existingProfile) {
+      return { error: 'A user with this email already exists in your academy.' }
+    }
+
+    // 2. Generate Auth Alias
+    const [localPart, domain] = email.split('@')
+    const authAlias = `${localPart}+${aid}@${domain}`
+
+    // 3. Create Auth User
     const { data: authUser, error: authError } = await adminClient.auth.admin.createUser({
-      email: email,
+      email: authAlias,
       password: 'Joor123',
       email_confirm: true,
       user_metadata: {
@@ -53,9 +69,6 @@ export async function createTeacher(rawData: unknown) {
 
     if (authError) {
       console.error('[TeacherAction] Auth Provisioning Error:', authError)
-      if (authError.message.includes('already been registered')) {
-        return { error: `Authentication setup failed: This email is already registered. If a previous attempt failed, please delete the orphaned user from your Supabase Dashboard (Auth > Users) and try again.` }
-      }
       return { error: `Authentication setup failed: ${authError.message}` }
     }
 
@@ -177,8 +190,25 @@ export async function updateTeacher(id: string, rawData: unknown) {
 
     // 2. Update Auth Email if changed
     if (email) {
+      // Check tenant uniqueness
+      const { data: existingProfile } = await adminClient
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .eq('academy_id', aid)
+        .neq('id', teacher.user_id)
+        .single()
+
+      if (existingProfile) {
+        return { error: 'A user with this email already exists in your academy.' }
+      }
+
+      // Update alias in auth.users
+      const [localPart, domain] = email.split('@')
+      const authAlias = `${localPart}+${aid}@${domain}`
+
       const { error: authError } = await adminClient.auth.admin.updateUserById(teacher.user_id, {
-        email: email,
+        email: authAlias,
       })
       if (authError) console.error('[TeacherAction] Auth Email Update Error:', authError)
     }

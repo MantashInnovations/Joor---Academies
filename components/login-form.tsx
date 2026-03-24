@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
-import { getEmailByCnic } from "@/app/actions/auth"
+import { getEmailByCnic, getAuthEmailByEmail } from "@/app/actions/auth"
 import { Button } from "@/components/ui/button"
 import { RippleButton } from "@/components/ui/ripple-button"
 import {
@@ -69,6 +69,18 @@ export function LoginForm({
       }
       if (lookup.email) {
         loginEmail = lookup.email
+      }
+    } else {
+      // It's an email - we need to resolve it in case it's an aliased teacher/student email
+      console.log("[LoginForm] identifier is email, resolving true auth email...")
+      const lookup = await getAuthEmailByEmail(identifier)
+      if (lookup.error) {
+        setError(lookup.error)
+        setLoading(false)
+        return
+      }
+      if (lookup.authEmail) {
+        loginEmail = lookup.authEmail
       }
     }
 

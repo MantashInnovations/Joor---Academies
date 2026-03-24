@@ -38,43 +38,52 @@ export async function POST(request: Request) {
       )
     }
 
-    // 2. Find user ID by email efficiently
-    const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers()
-    const targetUser = users.find((u) => u.email === email)
-    
-    if (listError || !targetUser) {
-      return NextResponse.json({ error: "Failed to process request." }, { status: 404 })
+    // 2. Find profiles associated with this email
+    const { data: profiles, error: profilesError } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('email', email)
+
+    if (profilesError || !profiles || profiles.length === 0) {
+      return NextResponse.json({ error: "Failed to locate account(s)." }, { status: 404 })
     }
 
     // 3. Security Check: Ensure new password is different from current one
-    // We use a fresh client for this check to avoid session pollution
+    // Try to sign in to the first profile to test if the password is the same
     const checkClient = createAdminClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       { auth: { persistSession: false } }
     )
 
-    const { data: signInData } = await checkClient.auth.signInWithPassword({
-      email,
-      password: newPassword,
-    })
+    // We can't log in directly with the standard email if there are multiple accounts 
+    // without knowing an exact alias. So we fetch the first auth.users email (alias).
+    const { data: firstUserData } = await supabaseAdmin.auth.admin.getUserById(profiles[0].id)
+    
+    if (firstUserData?.user?.email) {
+      const { data: signInData } = await checkClient.auth.signInWithPassword({
+        email: firstUserData.user.email,
+        password: newPassword,
+      })
 
-    if (signInData?.user) {
-      return NextResponse.json(
-        { error: "New password must be different from your current password." },
-        { status: 400 }
-      )
+      if (signInData?.user) {
+        return NextResponse.json(
+          { error: "New password must be different from your current password." },
+          { status: 400 }
+        )
+      }
     }
 
-    // 4. Update password
-    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-      targetUser.id,
-      { password: newPassword }
-    )
-
-    if (updateError) {
-      console.error("Update password error:", updateError)
-      return NextResponse.json({ error: "Failed to update password." }, { status: 500 })
+    // 4. Update password for ALL associated accounts
+    for (const profile of profiles) {
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+        profile.id,
+        { password: newPassword }
+      )
+      if (updateError) {
+        console.error("Update password error for user", profile.id, ":", updateError)
+        // Note: we continue attempting updates even if one fails
+      }
     }
 
     // 5. Clean up OTP
